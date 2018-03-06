@@ -1,0 +1,45 @@
+import zbar
+
+# QR Reader class
+class QRScanner(threading.Thread):
+    def __init__(self):
+        threading.Thread.__init__(self)
+
+        self.WINDOW_NAME = 'Camera'
+        self.CV_SYSTEM_CACHE_CNT = 5 # Cv has 5-frame cache
+        self.LOOP_INTERVAL_TIME = 0.5
+
+        cv.NamedWindow(self.WINDOW_NAME, cv.CV_WINDOW_NORMAL)
+        self.cam = cv2.VideoCapture(-1)
+
+    def scan(self, aframe):
+        print aframe.shape    # If throws error 'NoneType' ==> img loaded improperly
+        imgray = cv2.cvtColor(aframe, cv2.COLOR_BGR2GRAY)
+        raw = str(imgray.data)
+
+        scanner = zbar.ImageScanner()
+        scanner.parse_config('enable')          
+
+        width = int(self.cam.get(cv.CV_CAP_PROP_FRAME_WIDTH))
+        height = int(self.cam.get(cv.CV_CAP_PROP_FRAME_HEIGHT))
+        imageZbar = zbar.Image(width, height,'Y800', raw)
+        scanner.scan(imageZbar)
+
+        for symbol in imageZbar:
+            print 'decoded', symbol.type, 'symbol', '"%s"' % symbol.data
+
+    def run(self):
+        while True:      
+            for i in range(0,self.CV_SYSTEM_CACHE_CNT):
+                self.cam.read()
+            img = self.cam.read()
+            self.scan(img[1])
+            # If the QR code is correct, exit while loop and release cam
+            cv2.imshow(self.WINDOW_NAME, img[1])
+            cv.WaitKey(1)
+            time.sleep(self.LOOP_INTERVAL_TIME)
+            
+        cam.release()
+
+scanner = QRScanner()
+scanner.start()

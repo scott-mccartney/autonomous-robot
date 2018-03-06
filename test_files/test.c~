@@ -1,0 +1,5 @@
+int main() {
+  fprintf("Hello world!");
+
+  return 0;
+}

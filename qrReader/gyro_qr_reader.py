@@ -1,0 +1,163 @@
+#!/usr/bin/python
+import cv2
+import cv2.cv as cv
+import numpy
+import zbar
+import time
+import picamera
+import picamera.array
+import threading
+import smbus
+import math
+
+camera = picamera.PiCamera()
+#LOOP_INTERVAL_TIME = 0.25
+lastRoomNumBin = 0
+
+# Room numbers are first 6 binary digits of QR code
+def roomBinaryLookup(roomInt):
+    if roomInt == 268:
+        return '000001'
+    elif roomInt == 271:
+        return '000010'
+    elif roomInt == 277:
+        return '000011'
+    else:
+        return '000001'     # Default room is 268
+
+def roomNumLookup(roomBin):
+    if roomBin in '000001':
+        return 268
+    elif roomBin in '000010':
+        return 271
+    elif roomBin in '000011':
+        return 277
+    else:
+        return 268
+
+def setLastRoomNum(roomIntBin):
+    lastRoomNumBin = roomIntBin
+
+def getLastRoomNum():
+    return lastRoomNumBin
+
+def wrongDirection(goalRoomBin, currRoomBin):
+    # If starting from room number higher up
+    if roomNumLookup(goalRoomBin) < roomNumLookup(getLastRoomNum):
+        return roomNumLookup(getLastRoomNum()) < roomNumLookup(currRoomBin)
+    else:   # If starting from room number lower
+        return roomNumLookup(getLastRoomNum()) > roomNumLookup(currRoomBin)
+
+'''
+    QR Scanner Class
+    - Runs as thread, taking picture about twice a second
+    - Commented out camera preview because it is not necessary
+'''
+class QRScanner(threading.Thread):
+    def __init__(self, roomBin):
+        threading.Thread.__init__(self)
+        self.roomNum = roomBin
+        camera.start_preview()
+        time.sleep(2)
+
+    def scan(self, img):   
+        imgray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        raw = str(imgray.data)
+        
+        scanner = zbar.ImageScanner()
+        scanner.parse_config('enable')
+
+        imageZbar = zbar.Image(1920, 1080, 'Y800', raw)
+        scanner.scan(imageZbar)
+
+        for symbol in imageZbar:
+            if symbol.data[:6] in self.roomNum:
+                print 'Room Binary num: ', symbol.data[:6]
+                print 'Room characteristics: ', symbol.data[6:]
+                return symbol.data[6:]
+            else:
+                setLastRoomNum(symbol.data[:6])
+                #turnAround = wrongDirection(self.roomNum, symbol.data[:6])
+
+    def run(self):
+        while True:
+            stream = picamera.array.PiRGBArray(camera)
+            camera.capture(stream, format='bgr')
+
+            img1 = stream.array
+            right_door = self.scan(img1)
+
+            if right_door:
+                print 'Right door found!'
+                break
+
+        camera.stop_preview()
+
+'''
+    Gyroscope class
+'''
+class Gyroscope(threading.Thread):
+    def __init__(self):
+        threading.Thread.__init__(self)
+
+        # Power management registers
+        self.power_mgmt_1 = 0x6b
+        self.power_mgmt_2 = 0x6c
+
+        self.bus = smbus.SMBus(1)
+        self.address = 0x68       
+
+        # Now wake the 6050 up as it starts in sleep mode
+        self.bus.write_byte_data(self.address, self.power_mgmt_1, 0)
+        time.sleep(2)
+
+    def read_byte(self, adr):
+        return self.bus.read_byte_data(self.address, adr)
+
+    def read_word(self, adr):
+        high = self.bus.read_byte_data(self.address, adr)
+        low = self.bus.read_byte_data(self.address, adr+1)
+        val = (high << 8) + low
+        return val
+
+    def read_word_2c(self, adr):
+        val = self.read_word(adr)
+        if (val >= 0x8000):
+            return -((65535 - val) + 1)
+        else:
+            return val
+
+    def dist(self, a, b):
+        return math.sqrt((a*a)+(b*b))
+
+    def get_y_rotation(self, x, y, z):
+        radians = math.atan2(x, self.dist(y,z))
+        return -math.degrees(radians)
+
+    def get_x_rotation(self, x, y, z):
+        radians = math.atan2(y, self.dist(x,z))
+        return math.degrees(radians)
+
+    def run(self):
+        #while True:
+        for i in range(0, 500):
+            gyro_xout = self.read_word_2c(0x43)
+            gyro_yout = self.read_word_2c(0x45)
+            gyro_zout = self.read_word_2c(0x47)
+            accel_xout = self.read_word_2c(0x3b)
+            accel_yout = self.read_word_2c(0x3d)
+            accel_zout = self.read_word_2c(0x3f)
+            axs = accel_xout / 16384.0
+            ays = accel_yout / 16384.0
+            azs = accel_zout / 16384.0
+
+            print("x_rot, y_rot: " , '{0:.2f}'.format(self.get_x_rotation(axs, ays, azs)), '{0:.2f}'.format(self.get_y_rotation(axs, ays, azs)))
+			
+	    #if self.get_x_rotation(axs, ays, azs) < 0.5:
+            #   break
+
+roomBin = roomBinaryLookup(268)
+scanner = QRScanner(roomBin)
+scanner.start()
+#gyro = Gyroscope()
+#gyro.start()

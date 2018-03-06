@@ -1,0 +1,52 @@
+Raspberry Pi
+Zbar is installed
+	- Need camera installed to test
+MPU6050 detects orientation
+ 	- (especially changes in degree over short periods of time)
+	- Upgrade to MPU9250
+	- Work on detect directional acceleration with accelerometer
+		(Easier with MPU9250)
+	
+
+Arduino
+Ultrasonic sensors up and running
+	- Detect distance
+Laser/photocell?
+
+
+Plan:
+1. Output motors so that the robot moves forward
+	a. Keep track of gyroscope data, if significant change,
+	   correct.
+	b. Keep track of L, F, R ultrasonic sensors.
+		i. If L/R are close, adjust motors so they move away
+		ii. If F is close, navigate left or right 90 degrees
+		    (What direction should we go next time F is close?)
+		iii. For 90 degree turn, use gyroscope, setting 
+		     temporary reference value and turning until 
+		     the displacement is 90 degrees
+2. Read data from Raspberry Pi camera
+	a. If QR code sensed, stop reading from Pi camera for x seconds
+	b. Translate first 4 binary digits of string into a number 0-15
+	c. Look up that 0-15 in memory to get actual room #
+	d. If incorrect, continue moving and turn Pi camera back on
+	e. If correct, translate last 4 binary digits, considering
+	   each digit individually
+3. Look up how to use motors for each of 4 digit possibilties
+	- For 90 degree turn, use gyroscope, setting temporary
+	  reference value and turning until the displacement is 90
+	  degrees
+
+Running at all times:
+1. Ultrasonic sensors are priority
+	- Don't run into anything
+2. Raspberry Pi camera
+	- These are the end goals
+	- ** Turns off for a short period after reading a QR code 
+	  so that it doesn't read it again
+3. Gyroscope
+	- Measure the turn of the robot
+4. Motors
+	- Output almost continuously, stopping only when the right
+	  QR code is found, then different maneuvers are made to
+	  guide the robot through the door
